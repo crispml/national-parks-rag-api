@@ -1,0 +1,7 @@
+google-genai
+qdrant-client
+pandas
+python-dotenv
+fastapi
+uvicorn
+pytest

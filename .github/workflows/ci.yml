@@ -1,0 +1,228 @@
+# ============================================================
+# GitHub Actions CI/CD Pipeline
+# National Parks RAG API
+#
+# Flow:
+# Push to GitHub
+#       ↓
+# Run pytest
+#       ↓
+# Build Docker image
+#       ↓
+# Push Docker image to GHCR
+#       ↓
+# Trigger Render deployment (enabled later)
+# ============================================================
+
+
+# Name displayed under the GitHub "Actions" tab
+name: National Parks RAG CI/CD
+
+
+# ------------------------------------------------------------
+# WHEN SHOULD THIS WORKFLOW RUN?
+# ------------------------------------------------------------
+
+on:
+
+  # Run whenever code is pushed to the main branch
+  push:
+    branches:
+      - main
+
+  # Also run when a Pull Request targets the main branch
+  pull_request:
+    branches:
+      - main
+
+
+# ------------------------------------------------------------
+# PERMISSIONS GIVEN TO THIS WORKFLOW
+# ------------------------------------------------------------
+
+permissions:
+
+  # Allows GitHub Actions to read the repository source code
+  contents: read
+
+  # Allows GitHub Actions to push Docker images to GHCR
+  packages: write
+
+
+# ============================================================
+# JOBS
+# ============================================================
+
+jobs:
+
+
+  # ==========================================================
+  # JOB 1: TEST THE APPLICATION
+  # ==========================================================
+
+  test:
+
+    # GitHub creates a temporary Ubuntu machine for this job
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ------------------------------------------------------
+      # Download/checkout our repository onto the runner
+      # ------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+
+      # ------------------------------------------------------
+      # Install Python 3.12 on the GitHub Actions runner
+      # ------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+          # Cache downloaded pip packages to speed up later runs
+          cache: "pip"
+
+
+      # ------------------------------------------------------
+      # Install all Python dependencies
+      # ------------------------------------------------------
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+
+      # ------------------------------------------------------
+      # Run automated tests from the tests/ directory
+      #
+      # If pytest fails, this job fails.
+      # Since the Docker job depends on this job,
+      # the Docker image will NOT be built/published.
+      # ------------------------------------------------------
+      - name: Run tests
+        run: pytest
+
+
+
+  # ==========================================================
+  # JOB 2: BUILD AND PUBLISH DOCKER IMAGE
+  # ==========================================================
+
+  docker:
+
+    # Use another temporary Ubuntu runner
+    runs-on: ubuntu-latest
+
+    # Do not start this job until the test job succeeds
+    needs: test
+
+    # Build/publish the Docker image only for an actual push.
+    #
+    # Pull Requests will run tests, but they will not
+    # publish a Docker image.
+    if: github.event_name == 'push'
+
+    steps:
+
+      # ------------------------------------------------------
+      # Checkout repository again
+      #
+      # Each GitHub Actions job gets its own runner,
+      # therefore this job needs its own checkout.
+      # ------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+
+      # ------------------------------------------------------
+      # Login to GitHub Container Registry (GHCR)
+      # ------------------------------------------------------
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+
+          # GitHub's Docker/container registry
+          registry: ghcr.io
+
+          # GitHub account that triggered the workflow
+          username: ${{ github.actor }}
+
+          # Temporary token automatically supplied by GitHub
+          # packages: write permission above allows this token
+          # to push the Docker image to GHCR.
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+
+      # ------------------------------------------------------
+      # Set up Docker Buildx
+      #
+      # Buildx provides Docker's modern image-building
+      # functionality.
+      # ------------------------------------------------------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+
+      # ------------------------------------------------------
+      # BUILD THE DOCKER IMAGE AND PUSH IT TO GHCR
+      # ------------------------------------------------------
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+
+        with:
+
+          # "." means use the current repository directory
+          # as the Docker build context.
+          #
+          # Docker will find the Dockerfile here.
+          context: .
+
+          # After building the image, push it to GHCR
+          push: true
+
+          # --------------------------------------------------
+          # Give the same Docker image TWO tags.
+          #
+          # Example:
+          #
+          # ghcr.io/crispml/national-parks-rag-api:latest
+          #
+          # and
+          #
+          # ghcr.io/crispml/national-parks-rag-api:<commit-SHA>
+          #
+          # :latest
+          #     Convenient for Render to pull the newest image.
+          #
+          # :github.sha
+          #     Identifies exactly which Git commit produced
+          #     the Docker image.
+          # --------------------------------------------------
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/national-parks-rag-api:latest
+            ghcr.io/${{ github.repository_owner }}/national-parks-rag-api:${{ github.sha }}
+
+
+      # ======================================================
+      # RENDER DEPLOYMENT
+      # ======================================================
+      #
+      # Keep this commented until:
+      #
+      # 1. Render Web Service has been created
+      # 2. Render is configured to use the GHCR image
+      # 3. RENDER_DEPLOY_HOOK has been added to
+      #    GitHub repository secrets
+      #
+      # Once enabled, GitHub Actions sends a POST request
+      # to Render after the new Docker image has been
+      # successfully pushed to GHCR.
+      #
+      # Render can then pull the new :latest image
+      # and deploy it.
+      #
+      # - name: Trigger Render deployment
+      #   run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
