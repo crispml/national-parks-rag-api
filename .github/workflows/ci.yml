@@ -103,9 +103,9 @@ jobs:
       # the Docker image will NOT be built/published.
       # ------------------------------------------------------
       - name: Run tests
-        run: pytest
-
-
+        env:
+          PYTHONPATH: .
+        run: pytest -v
 
   # ==========================================================
   # JOB 2: BUILD AND PUBLISH DOCKER IMAGE
