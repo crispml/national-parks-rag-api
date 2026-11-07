@@ -223,6 +223,5 @@ jobs:
       #
       # Render can then pull the new :latest image
       # and deploy it.
-      #
-      # - name: Trigger Render deployment
-      #   run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+      - name: Trigger Render deployment
+        run: curl --fail --show-error --silent -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
