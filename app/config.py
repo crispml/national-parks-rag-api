@@ -9,8 +9,8 @@ load_dotenv()
 # -------------------------
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # QDRANT_URL="http://localhost:6333"
-QDRANT_URL="https://1400f27a-86d5-4a53-9a88-553ef48d5067.us-east-1-1.aws.cloud.qdrant.io"
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
+QDRANT_URL = os.getenv("QDRANT_URL")
 
 
 # -------------------------
